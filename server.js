@@ -51,4 +51,16 @@ app.get('/incidents', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
+app.get('/test', async (req, res) => {
+    try {
+        const id = '00144'; // TVF&R is always busy
+        const url = `https://web.pulsepoint.org/data/giba.php?agencyid=${id}`;
+        const response = await axios.get(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        res.json(response.data.incidents || []);
+    } catch (err) {
+        res.json({ error: err.message });
+    }
+});
 app.listen(PORT, () => console.log(`Master Fix Bridge active on port ${PORT}`));
