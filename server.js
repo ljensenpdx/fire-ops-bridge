@@ -1,6 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const dns = require('node:dns');
+
+// Forces IPv4 to resolve the ENOTFOUND issue on Render
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.use(cors());
@@ -11,20 +15,20 @@ app.get('/incidents', async (req, res) => {
     try {
         const promises = agencyIds.map(async (id) => {
             try {
-                // We are switching to the 'Incidents' endpoint used by the Respond App
-                // This endpoint rarely encrypts data and is much more stable.
-                const url = `https://m.pulsepoint.org/data/incidents.php?agencyid=${id}`;
-                
-                const response = await axios.get(url, {
-                    timeout: 8000,
+                // Hitting the Web-App endpoint with full spoofed headers
+                const response = await axios.get(`https://web.pulsepoint.org/data/giba.php?agencyid=${id}`, {
+                    timeout: 12000,
                     headers: {
-                        'User-Agent': 'PulsePoint/4.0 (iPhone; iOS 17.0; Scale/3.00)',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                        'Accept': 'application/json, text/javascript, */*; q=0.01',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Referer': 'https://web.pulsepoint.org/',
+                        'Origin': 'https://web.pulsepoint.org',
+                        'Connection': 'keep-alive'
                     }
                 });
 
-                // The mobile API structure: data -> active_incidents
-                const incidents = response.data.active_incidents || response.data.incidents || [];
+                const incidents = response.data.incidents || [];
                 return incidents.map(inc => ({ ...inc, agency_id: id }));
             } catch (err) {
                 return [];
@@ -32,15 +36,20 @@ app.get('/incidents', async (req, res) => {
         });
 
         const results = await Promise.all(promises);
-        res.json(results.flat());
+        const allCalls = results.flat();
+
+        // LOGGING: Check your Render logs - it will show how many calls we found
+        console.log(`Sync complete. Total calls: ${allCalls.length}`);
+
+        res.json(allCalls);
     } catch (err) {
-        res.status(500).json({ error: "Bridge Error", detail: err.message });
+        res.status(500).json({ error: "Bridge Processing Error", detail: err.message });
     }
 });
 
 app.get('/test', (req, res) => {
-    res.json({ status: "online", time: new Date().toLocaleTimeString() });
+    res.json({ status: "online", time: new Date().toLocaleTimeString(), tracking: agencyIds.length });
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Mobile Bypass Bridge active on ${PORT}`));
+app.listen(PORT, () => console.log(`Ultimate Session Bridge active on ${PORT}`));
