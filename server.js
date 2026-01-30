@@ -9,9 +9,12 @@ dns.setDefaultResultOrder('ipv4first');
 const app = express();
 app.use(cors());
 
-// --- THE ROBUST 2026 DECRYPTOR ---
+/**
+ * THE MIRROR DECRYPTION ENGINE
+ * This perfectly reverses the PulsePoint web encryption.
+ */
 function decryptPulsePoint(data) {
-    if (!data || !data.ct) return [];
+    if (!data || !data.ct) return data; // Return raw if not encrypted
     
     try {
         const passphrase = "nombrady5rings";
@@ -19,7 +22,7 @@ function decryptPulsePoint(data) {
         const iv = Buffer.from(data.iv, 'hex');
         const ct = Buffer.from(data.ct, 'base64');
 
-        // Key Derivation (MD5 Salted)
+        // Derive Key (MD5 Salted)
         let key = Buffer.alloc(0);
         let block = Buffer.alloc(0);
         while (key.length < 32) {
@@ -30,23 +33,25 @@ function decryptPulsePoint(data) {
         const decipher = crypto.createDecipheriv('aes-256-cbc', key.slice(0, 32), iv);
         let decrypted = decipher.update(ct, 'binary', 'utf8') + decipher.final('utf8');
         
-        // --- 2026 DATA CLEANING STEP ---
-        // PulsePoint wraps the JSON in extra quotes and backslashes
+        // --- THE MIRROR STEP ---
+        // 1. Remove surrounding quotes if they exist
         let cleaned = decrypted.trim();
-        if (cleaned.startsWith('"')) cleaned = cleaned.substring(1);
-        if (cleaned.endsWith('"')) cleaned = cleaned.substring(0, cleaned.length - 1);
+        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+            cleaned = cleaned.substring(1, cleaned.length - 1);
+        }
         
-        // Remove backslash escapes (\")
+        // 2. Unescape backslashes (Turning \" back into ")
         cleaned = cleaned.replace(/\\"/g, '"');
-        
+        cleaned = cleaned.replace(/\\\\/g, '\\');
+
+        // 3. Parse the now-clean string into a real JSON object
         const parsed = JSON.parse(cleaned);
         
-        // Extract the 'active' list
-        const incidents = parsed.incidents?.active || parsed.active || [];
-        return Array.isArray(incidents) ? incidents : [incidents];
+        // 4. Return the 'active' list (the "PulsePoint Output")
+        return parsed.incidents?.active || parsed.active || parsed.incidents || [];
     } catch (e) {
-        console.log("Parsing/Decryption Error:", e.message);
-        return [];
+        console.log("Mirroring Error:", e.message);
+        return { error: "Decryption failed", raw: data };
     }
 }
 
@@ -55,21 +60,21 @@ app.get('/incidents', async (req, res) => {
     try {
         const url = `https://web.pulsepoint.org/data/giba.php?agencyid=${id}`;
         const response = await axios.get(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         });
 
-        const incidents = decryptPulsePoint(response.data);
-        console.log(`Clackamas Status: Found ${incidents.length} active incidents.`);
+        const output = decryptPulsePoint(response.data);
         
-        res.json(incidents);
+        // Set content type to JSON so the browser formats it nicely
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify(output, null, 4)); // Pretty-print with 4 spaces
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.get('/test', (req, res) => {
-    res.json({ status: "online", time: new Date().toLocaleTimeString() });
-});
-
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Clean-Room Bridge active on ${PORT}`));
+app.listen(PORT, () => console.log(`Mirror Bridge active on port ${PORT}`));
