@@ -9,12 +9,9 @@ dns.setDefaultResultOrder('ipv4first');
 const app = express();
 app.use(cors());
 
-/**
- * THE CLACKAMAS-X DECRYPTION ENGINE
- * Specifically tuned for the 2026 'active' folder structure.
- */
+// --- THE ROBUST 2026 DECRYPTOR ---
 function decryptPulsePoint(data) {
-    if (!data || !data.ct) return data.incidents || [];
+    if (!data || !data.ct) return [];
     
     try {
         const passphrase = "nombrady5rings";
@@ -22,7 +19,7 @@ function decryptPulsePoint(data) {
         const iv = Buffer.from(data.iv, 'hex');
         const ct = Buffer.from(data.ct, 'base64');
 
-        // Derive AES-256-CBC Key
+        // Key Derivation (MD5 Salted)
         let key = Buffer.alloc(0);
         let block = Buffer.alloc(0);
         while (key.length < 32) {
@@ -33,39 +30,36 @@ function decryptPulsePoint(data) {
         const decipher = crypto.createDecipheriv('aes-256-cbc', key.slice(0, 32), iv);
         let decrypted = decipher.update(ct, 'binary', 'utf8') + decipher.final('utf8');
         
-        // Find the JSON block inside the decrypted string
-        const jsonStart = decrypted.indexOf('{');
-        const jsonEnd = decrypted.lastIndexOf('}');
-        const parsed = JSON.parse(decrypted.substring(jsonStart, jsonEnd + 1));
-
-        // --- THE FIX: NEW 2026 DATA PATH ---
-        // Clackamas puts the good stuff in incidents.active
-        const activeList = parsed.incidents?.active || parsed.active || parsed.incidents || [];
+        // --- 2026 DATA CLEANING STEP ---
+        // PulsePoint wraps the JSON in extra quotes and backslashes
+        let cleaned = decrypted.trim();
+        if (cleaned.startsWith('"')) cleaned = cleaned.substring(1);
+        if (cleaned.endsWith('"')) cleaned = cleaned.substring(0, cleaned.length - 1);
         
-        return Array.isArray(activeList) ? activeList : [activeList];
+        // Remove backslash escapes (\")
+        cleaned = cleaned.replace(/\\"/g, '"');
+        
+        const parsed = JSON.parse(cleaned);
+        
+        // Extract the 'active' list
+        const incidents = parsed.incidents?.active || parsed.active || [];
+        return Array.isArray(incidents) ? incidents : [incidents];
     } catch (e) {
-        console.log("Decryption failed:", e.message);
+        console.log("Parsing/Decryption Error:", e.message);
         return [];
     }
 }
 
 app.get('/incidents', async (req, res) => {
+    const id = '00057'; // Clackamas Fire
     try {
-        const id = '00057'; // Clackamas Fire
         const url = `https://web.pulsepoint.org/data/giba.php?agencyid=${id}`;
-        
         const response = await axios.get(url, {
-            timeout: 10000,
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: { 'User-Agent': 'Mozilla/5.0' }
         });
 
         const incidents = decryptPulsePoint(response.data);
-        
-        // This log will tell you if we finally cracked it
-        console.log(`Clackamas Final Check: Found ${incidents.length} active calls.`);
+        console.log(`Clackamas Status: Found ${incidents.length} active incidents.`);
         
         res.json(incidents);
     } catch (err) {
@@ -74,8 +68,8 @@ app.get('/incidents', async (req, res) => {
 });
 
 app.get('/test', (req, res) => {
-    res.json({ status: "online", target: "Clackamas (Fixed Path)", time: new Date().toLocaleTimeString() });
+    res.json({ status: "online", time: new Date().toLocaleTimeString() });
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Clackamas-X Bridge active on ${PORT}`));
+app.listen(PORT, () => console.log(`Clean-Room Bridge active on ${PORT}`));
