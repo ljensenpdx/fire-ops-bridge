@@ -5,7 +5,7 @@ const axios = require('axios');
 puppeteer.use(StealthPlugin());
 
 // --- ⚙️ CONFIGURATION ---
-const GITHUB_TOKEN = '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'; // Replace with your REGENERATED token
+const GITHUB_TOKEN = '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'; // Replace with your REGENERATED token
 const GITHUB_USER = 'ljensenpdx';
 const REPO_NAME = 'FireTracker'; 
 const FILE_PATH = 'data.json';
