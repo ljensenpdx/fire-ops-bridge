@@ -93,12 +93,67 @@ async function startBridge() {
         setInterval(async () => {
             console.log(`[${new Date().toLocaleTimeString()}] 🔍 SCRAPING MAP DATA...`);
             try {
-                const data = await page.evaluate(() => {
-                    const results = [];
-                    const rows = Array.from(document.querySelectorAll('tr, div[role="row"]'));
-                    // ... [Existing scrape logic remains exactly the same] ...
-                    return results; 
-                });
+               const data = await page.evaluate(() => {
+    const results = [];
+    // Target the actual incident containers more specifically
+    const rows = Array.from(document.querySelectorAll('div[role="row"], tr, .pp-incident-row'));
+    
+    for (const row of rows) {
+        const text = row.innerText;
+        
+        // If we hit the "Recent" section, we stop so we only get LIVE calls
+        if (text.includes('Recent')) break; 
+
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        // Find the line that looks like a timestamp (e.g., 8:13 PM)
+        const timeLine = lines.find(l => l.match(/\d{1,2}:\d{2}\s[AP]M/));
+
+        if (timeLine && lines.length >= 2) {
+            // Address usually has a comma or city name
+            const address = lines.find(l => l.includes(',') || l.match(/[A-Z]{2}\s\d{5}/)) || "Location Restricted";
+            
+            // Agency is usually the first line or mentions 'Fire', 'F&R', etc.
+            const agency = lines[0]; 
+            
+            // Type is the line that isn't the agency, address, or time
+            const type = lines.find(l => l !== agency && l !== address && l !== timeLine) || "Emergency Call";
+
+            // Grab Unit Chips
+            const unitMap = new Map();
+            const units = Array.from(row.querySelectorAll('div, span, td'))
+                .filter(el => /^[?^]*[A-Z0-9]{1,7}[?^*]*$/.test(el.innerText.trim()));
+
+            units.forEach(el => {
+                const raw = el.innerText.trim();
+                const clean = raw.replace(/[?^*]/g, '');
+                const color = window.getComputedStyle(el).color;
+                const [r, g, b] = color.match(/\d+/g).map(Number);
+
+                let status = "Dispatched";
+                if (raw.includes('?')) status = "Dispatched";
+                else if (r > 160 && g < 80) status = "On Scene";
+                else if (r > 200 && g > 180) status = "To Hospital";
+                else if (g > 160 && r < 120) status = "En Route";
+                else if (raw.includes('^')) status = "Available On Scene";
+                
+                unitMap.set(clean, status);
+            });
+
+            const buckets = {};
+            unitMap.forEach((s, u) => { if(!buckets[s]) buckets[s] = []; buckets[s].push(u); });
+
+            results.push({
+                agency: agency.toUpperCase(),
+                type: type,
+                time: timeLine,
+                address: address,
+                unitStatuses: Object.entries(buckets).map(([s, u]) => `${s}: ${u.join(', ')}`)
+            });
+        }
+    }
+    return results;
+}););
                 lastData = data;
                 console.log(`   -> Found ${lastData.length} incidents.`);
             } catch (e) {
@@ -118,3 +173,4 @@ async function startBridge() {
 }
 
 startBridge();
+
