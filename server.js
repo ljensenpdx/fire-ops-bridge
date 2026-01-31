@@ -6,7 +6,7 @@ puppeteer.use(StealthPlugin());
 
 // --- ⚙️ CONFIGURATION ---
 // BE CAREFUL: Ensure no extra spaces are inside the quotes below
-const GITHUB_TOKEN = 'YOUR_NEW_TOKEN_HERE'; 
+const GITHUB_TOKEN = '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'; 
 const GITHUB_USER = 'ljensenpdx';
 const REPO_NAME = 'FireTracker'; 
 const FILE_PATH = 'data.json';
@@ -112,3 +112,4 @@ async function startBridge() {
 }
 
 startBridge();
+
